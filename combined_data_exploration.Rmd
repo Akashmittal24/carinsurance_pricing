@@ -844,9 +844,179 @@ for(plot_varname in datetime_vars) {
 rm(plot_var, plot_tbl)
 ```
 
+## Other Bivariate Plots
+
+From looking at the various facetting and pairs plots we now look at some
+individual bivariate plots to see if we can learn anything useful from them.
+
+### density vs region
+
+We would expect the different regions to have different population density
+distributions, so we construct a boxplot of these densities by region to see
+how this looks
+
+```{r bivariate_boxplot_density_region, echo=TRUE}
+ggplot(data_tbl) +
+    geom_boxplot(aes(x = region, y = density)) +
+    scale_y_continuous(labels = comma) +
+    xlab("Region") +
+    ylab("Density") +
+    ggtitle("Boxplot of Population Density by Region")
+```
+
+We will also look at a histogram of these density values, but facet by region.
+
+```{r bivariate_facetplot_density_region, echo=TRUE, fig.height=16}
+ggplot(data_tbl) +
+    geom_histogram(aes(x = density), bins = 50) +
+    facet_wrap(~region, scales = 'free_y', ncol = 2) +
+    scale_y_continuous(labels = comma) +
+    xlab("Density") +
+    ylab("Frequency Count") +
+    ggtitle("density Histogram by region")
+```
+
+
+### exposure by region
+
+In some of the later plots we will be checking some geographical distributions
+of claim counts. Aware that the exposure distributions may not be the same, we
+first want to see how these compare.
+
+```{r plot_exposure_by_policycount, echo=TRUE}
+exposure_tbl <- data_tbl %>%
+    group_by(region) %>%
+    summarise(total_exposure = sum(exposure)
+             ,policy_count   = n())
+
+ggplot(exposure_tbl) +
+    geom_point(aes(x = policy_count, y = total_exposure, colour = region)) +
+    geom_text (aes(x = policy_count, y = total_exposure, colour = region, label = region)) +
+    scale_x_continuous(labels = comma) +
+    scale_y_continuous(labels = comma) +
+    xlab("Policy Count") +
+    ylab("Total Exposure (Policy Years") +
+    ggtitle("Plot of Policy Counts and Total Exposures per Region")
+
+```
+
+
+
+### claim_count by region
+
+We want to see if there is much of a geographical influence on claim counts
+in general, so we plot these separately also.
+
+```{r bivariate_facetplot_claimcount_region, echo=TRUE, fig.height=16}
+ggplot(data_tbl) +
+    geom_bar(aes(x = claim_count)) +
+    facet_wrap(~region, scales = 'free', ncol = 2) +
+    expand_limits(x = 4) +
+    scale_y_continuous(labels = comma) +
+    xlab("Claim Count") +
+    ylab("Frequency Count") +
+    ggtitle("claim_count Barplot by region")
+```
+
+We want to standardise these counts as not all regions will be equal, so we
+will look at this as a proportion of total policies and total exposures. The
+previous exploration suggests this will have little effect, but it is better
+to be sure as it is very quick to do.
+
+```{r policy_region_count, echo=TRUE, fig.height=16}
+policy_region_tbl <- data_tbl %>%
+    count(region)
+
+policyprop_tbl <- data_tbl %>%
+    left_join(policy_region_tbl, by = 'region') %>%
+    group_by(region, claim_count) %>%
+    summarise(count = n()
+             ,prop  = count / max(n)
+              )
+
+
+ggplot(policyprop_tbl) +
+    geom_col(aes(x = claim_count, y = prop)) +
+    facet_wrap(~region, ncol = 2) +
+    coord_flip() +
+    xlab("Proportion of Policies") +
+    ylab("Claims on Policy") +
+    ggtitle("Claim Proportion Barplot by Region")
+```
+
+We filter out the policies with no claims and re-plot.
+
+```{r policy_region_count_claimsonly, echo=TRUE, fig.height=16}
+ggplot(policyprop_tbl %>% filter(claim_count > 0)) +
+    geom_col(aes(x = claim_count, y = prop)) +
+    facet_wrap(~region, ncol = 2) +
+    coord_flip() +
+    xlab("Proportion of Policies") +
+    ylab("Claims on Policy") +
+    ggtitle("Claim Proportion Barplot by Region")
+```
+
+
+Looking at this a different way, we will produce the barplots by region, and
+facet by claim_count.
+
+
+```{r bivariate_barplot_claim_proportion_region_count, echo=TRUE}
+ggplot(policyprop_tbl %>% filter(claim_count > 0)) +
+    geom_col(aes(x = region, y = prop)) +
+    facet_wrap(~claim_count, ncol = 2, scales = 'free_y') +
+    xlab("Region") +
+    ylab("Proportion of Policies") +
+    ggtitle("Claim Proportion Barplot by Count of Claims and Region")
+```
+
+
+### region by car_age
+
+While unlikely, it is possible there is a geospatial distribution of car ages,
+so we construct a plot to look at that.
+
+```{r bivariate_boxplot_region_carage, echo=TRUE}
+ggplot(data_tbl) +
+    geom_boxplot(aes(x = region, y = car_age)) +
+    xlab("Region") +
+    ylab("Age of Car (years)") +
+    ggtitle("Boxplot of car_age by region")
+```
+
+A number of these cars are exceptionally old and are likely vintage. We may
+need to model these cars separately.
+
+
+### claim_total by region
+
+We want to take a look at total claims paid by region to see if there is a
+geospatial effect for claims paid out.
+
+```{r bivariate_boxplot_claimtotal_region, echo=TRUE}
+ggplot(data_tbl %>% filter(claim_total) > 0) +
+    geom_boxplot(aes(x = region, y = total_claims)) +
+    scale_y_log10(labels = scales::dollar) +
+    xlab("Region") +
+    ylab("Total Claims Paid on Policy") +
+    ggtitle("Boxplot of Total Claims on a Policy by region")
+```
+
+If we filter out the large claims (those above 25,000), we can look at large
+losses only.
+
+```{r bivariate_boxplot_claimtotal_region_attritional, echo=TRUE}
+ggplot(data_tbl %>% filter(claim_total) <= 25000) +
+    geom_boxplot(aes(x = region, y = total_claims)) +
+    scale_y_log10(labels = scales::dollar) +
+    xlab("Region") +
+    ylab("Total Claims Paid on Policy") +
+    ggtitle("Boxplot of Total Attritional Losses on a Policy by region")
+```
+
 
 ```{r, echo=FALSE}
-#knitr::knit_exit()
+knitr::knit_exit()
 ```
 
 
@@ -941,7 +1111,7 @@ from multiple samples.
 
 ```{r create_tsne_plots, echo=TRUE}
 tsne_iter_count   <-     4
-tsne_sample_count <- 10000
+tsne_sample_count <-  5000
 
 row_ids <- data_tbl %>%
     select(one_of(numeric_vars)) %>%
