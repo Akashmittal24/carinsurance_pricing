@@ -1,5 +1,5 @@
 ---
-title: "GLMs for Car Insurance Pricing: Initial Policy Data Exploration"
+title: "GLMs for Car Insurance Pricing: Combined Data Exploration"
 author: "Mick Cooney <mickcooney@gmail.com>"
 date: "`r Sys.Date()`"
 output:
@@ -15,12 +15,6 @@ output:
 ```{r knit_opts, include=FALSE}
 rm(list = ls())
 
-knitr::opts_chunk$set(tidy       = FALSE
-                     ,cache      = FALSE
-                     ,fig.height =     8
-                     ,fig.width  =    11
-                     )
-
 library(tidyverse)
 library(forcats)
 library(lubridate)
@@ -29,168 +23,23 @@ library(GGally)
 library(cowplot)
 library(Rtsne)
 library(feather)
-library(CASdatasets)
 
 
 options(width = 90L
        ,warn  = 1)
 
+knitr::opts_chunk$set(tidy       = FALSE
+                     ,cache      = FALSE
+                     ,warning    = FALSE
+                     ,message    = FALSE
+                     ,fig.height =     8
+                     ,fig.width  =    11
+                     )
+
+
 set.seed(42)
 
-#source("custom_functions.R")
-
-
-### clean_names() sanitises the column names of the data
-clean_names <- function(colnames) {
-    colnames <- gsub(" ",          "_", colnames) %>%
-        gsub("/",                  "_",      .) %>%
-        gsub("\\.",                "_",      .) %>%
-        gsub("\\-",                "_",      .) %>%
-        gsub("'",                  "",       .) %>%
-        gsub("`",                  "",       .) %>%
-        gsub("\\(",                "",       .) %>%
-        gsub("\\)",                "",       .) %>%
-        gsub("\\?",                "",       .) %>%
-        gsub("\\%",                "",       .) %>%
-        gsub("\u2019",             "",       .) %>%
-        gsub("\u20AC",            'EUR',     .) %>%
-        gsub('(.)([A-Z][a-z]+)',  '\\1_\\2', .) %>%
-        gsub('([a-z0-9])([A-Z])', '\\1_\\2', .) %>%
-        gsub('1_st',              '1st',     .) %>%
-        gsub('2_nd',              '2nd',     .) %>%
-        tolower %>%
-        gsub('__+',               '_',       .)
-
-    return(colnames)
-}
-
-
-### Checks if variable is a date/time
-is_date <- function(.x) inherits(.x, c("POSIXt", "POSIXct", "POSIXlt", "Date", "hms"))
-
-
-### Returns the category of data type passed to it
-categorise_datatype <- function (x) {
-    if(all(is.na(x))) return("na")
-
-    if(is_date(x))                          "datetime"
-    else if (!is.null(attributes(x)) ||
-             all(is.character(x)))          "discrete"
-    else if (all(is.logical(x)))            "logical"
-    else                                    "continuous"
-}
-
-
-### create_coltype_list() splits columns into various types
-create_coltype_list <- function(data_tbl) {
-    coltypes <- data_tbl %>%
-        map_chr(categorise_datatype)
-
-    cat_types <- coltypes %>%
-        unique %>%
-        sort
-
-    split_lst <- cat_types %>%
-        map(function(x) { coltypes[coltypes %in% x] %>% names })
-
-    names(split_lst) <- coltypes %>% unique %>% sort
-
-    coltype_lst <- list(
-        split   = split_lst
-       ,columns = coltypes
-    )
-
-    return(coltype_lst)
-}
-
-
-### Creates a subset of rows and columns of a data frame
-create_ggpairs_tbl <- function(data_tbl, sample_cols, sample_rows, verbose = FALSE) {
-
-    ncol_data <- ncol(data_tbl)
-    nrow_data <- nrow(data_tbl)
-
-    if(ncol_data > sample_cols) {
-        col_index <- sample(ncol(data_tbl), sample_cols, replace = FALSE) %>% sort
-    } else {
-        col_index <- 1:ncol_data
-    }
-
-    row_count <- ifelse(nrow_data > sample_rows, sample_rows, nrow_data)
-
-    if(verbose) {
-        cat(paste0(names(data_tbl)[col_index], collapse = ','))
-        cat("\n")
-
-        data_tbl %>% select(col_index) %>% glimpse
-    }
-
-    sample_tbl <- data_tbl %>%
-        select(col_index) %>%
-        sample_n(row_count)
-
-
-    ### Check we are not missing any data
-    missing_check <- (sample_tbl %>% filter(complete.cases(.)) %>% nrow) == 0
-
-    ### Check data is not same value down column
-    unique_val_count <- sample_tbl %>%
-        summarise_all(function(x) x %>% unique %>% length) %>%
-        gather %>%
-        filter(value == 1) %>%
-        nrow
-    same_check <- (unique_val_count > 0)
-
-    if(missing_check || same_check) {
-        sample_tbl <- create_ggpairs_tbl(data_tbl, sample_cols, sample_rows)
-    }
-
-
-    return(sample_tbl)
-}
-
-
-### Creates outputs for samples of data if row count is above a threshold. Otherwise calculates once
-### on the whole dataset
-create_sampled_output <- function(fulldata_tbl, summ_func, row_count = 2000, iter_count = 5) {
-    output_lst <- list()
-
-    if((fulldata_tbl %>% nrow) > row_count) {
-        for(i in 1:iter_count) {
-            sample_tbl <- fulldata_tbl %>%
-                sample_n(row_count)
-
-            output_lst[[i]] <- summ_func(sample_tbl)
-        }
-    } else {
-        output_lst[[1]] <- summ_func(fulldata_tbl)
-    }
-
-    return(output_lst)
-}
-
-
-### Identify outliers
-identify_univariate_outliers <- function(x) {
-    outlier_vals <- boxplot.stats(x)$out
-
-    outlier_point <- x %in% outlier_vals
-
-    return(outlier_point)
-}
-
-
-### Jitter numeric variable
-add_jitter <- function(x) x * rlnorm(length(x), 0, 0.0001)
-
-
-### Jitter numeric data to assist with uniqueness
-jitter_numeric_variables <- function(data_tbl) {
-    data_tbl <- data_tbl %>%
-        mutate_if(is.numeric, add_jitter)
-
-    return(data_tbl)
-}
+source("custom_functions.R")
 ```
 
 
@@ -211,18 +60,18 @@ dataexp_hist_bins_count <- 50
 First we load the dataset.
 
 ```{r load_dataset, echo=TRUE}
-data(freMTPLfreq)
-data(freMTPLsev)
+policy_data_tbl <- read_feather('data/policy_data.feather')
+claim_data_tbl  <- read_feather('data/claim_data.feather')
 
-policy_data_tbl <- freMTPLfreq
-claim_data_tbl  <- freMTPLsev %>%
-    group_by(PolicyID) %>%
+claim_agg_tbl <- claim_data_tbl %>%
+    group_by(policy_id) %>%
     summarise(claim_count = n()
-             ,claim_total = sum(ClaimAmount)
-             )
+             ,claim_total = sum(claim_amount)
+    )              
+
 
 rawdata_tbl <- policy_data_tbl %>%
-    left_join(claim_data_tbl, by = 'PolicyID') %>%
+    left_join(claim_agg_tbl, by = 'policy_id') %>%
     as_data_frame
 
 glimpse(rawdata_tbl)
@@ -249,9 +98,7 @@ from the claim data.
 
 ```{r fix_claim_fields, echo=TRUE}
 data_tbl <- data_tbl %>%
-    mutate(claim_count = ifelse(is.na(claim_count), 0, claim_count)
-          ,claim_total = ifelse(is.na(claim_total), 0, claim_total)
-           )
+    replace_na(list(claim_count = 0, claim_total = 0))
 
 data_tbl %>% filter(claim_count != claim_nb)
 
@@ -273,8 +120,7 @@ We now create derived features useful for modelling. These values are
 new variables calculated from existing variables in the data.
 
 ```{r create_derived_variables, echo=TRUE}
-data_tbl <- data_tbl %>%
-    mutate(policy_id = as.character(policy_id))
+data_tbl <- data_tbl
 
 glimpse(data_tbl)
 ```
@@ -474,6 +320,14 @@ if(length(drop_vars) > 0) {
 ```
 
 
+# Write to Disk
+
+```{r write_to_disk, echo=TRUE}
+write_feather(data_tbl, path = 'data/policyaggclaim_data.feather')
+```
+
+
+
 
 # Univariate Data Exploration
 
@@ -613,7 +467,6 @@ for(plot_varname in datetime_vars) {
     plot(explore_plot)
 }
 ```
-
 
 
 ```{r, echo=FALSE}
@@ -994,8 +847,8 @@ We want to take a look at total claims paid by region to see if there is a
 geospatial effect for claims paid out.
 
 ```{r bivariate_boxplot_claimtotal_region, echo=TRUE}
-ggplot(data_tbl %>% filter(claim_total) > 0) +
-    geom_boxplot(aes(x = region, y = total_claims)) +
+ggplot(data_tbl %>% filter(claim_total > 0)) +
+    geom_boxplot(aes(x = region, y = claim_total)) +
     scale_y_log10(labels = scales::dollar) +
     xlab("Region") +
     ylab("Total Claims Paid on Policy") +
@@ -1006,8 +859,8 @@ If we filter out the large claims (those above 25,000), we can look at large
 losses only.
 
 ```{r bivariate_boxplot_claimtotal_region_attritional, echo=TRUE}
-ggplot(data_tbl %>% filter(claim_total) <= 25000) +
-    geom_boxplot(aes(x = region, y = total_claims)) +
+ggplot(data_tbl %>% filter(claim_total <= 25000)) +
+    geom_boxplot(aes(x = region, y = claim_total)) +
     scale_y_log10(labels = scales::dollar) +
     xlab("Region") +
     ylab("Total Claims Paid on Policy") +
@@ -1018,6 +871,8 @@ ggplot(data_tbl %>% filter(claim_total) <= 25000) +
 ```{r, echo=FALSE}
 knitr::knit_exit()
 ```
+
+
 
 
 # Multivariate Visualisation
